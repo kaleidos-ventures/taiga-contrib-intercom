@@ -1,0 +1,8 @@
+{
+    "name": "Intercom",
+    "slug": "intercom",
+    "description": "Intercom.io integration",
+    "type": "misc",
+    "module": "intercomPlugin",
+    "js": "/plugins/intercom/intercom.js"
+}
