@@ -22,18 +22,22 @@
 # File: call-to-action.coffee
 ###
 
-IntercomDirective = ($config, $analytics) ->
+IntercomDirective = ($config, $analytics, $rootScope) ->
     initialized = false
+    disabled = false
 
     refreshUser = (user) ->
         if user
-            window.Intercom('boot', {
-                app_id: $config.get('intercomApiKey'),
-                email: user.email,
-                user_id: user.id,
-                created_at: user.date_joined,
-                analytics_id: user.uuid,
-            })
+            if moment(user.date_joined) > moment("2017-12-01")
+                window.Intercom('boot', {
+                    app_id: $config.get('intercomApiKey'),
+                    email: user.email,
+                    user_id: user.id,
+                    created_at: user.date_joined,
+                    analytics_id: user.uuid,
+                })
+            else
+                disabled = true
         else
             window.Intercom('boot', {app_id: $config.get('intercomApiKey')})
 
@@ -43,6 +47,7 @@ IntercomDirective = ($config, $analytics) ->
             trackPage(url, title)
             return if not initialized
             return if not window.Intercom
+            return if disabled
             window.Intercom('trackEvent', 'pageview', {url, title})
 
         trackEvent = $analytics.trackEvent.bind($analytics)
@@ -50,43 +55,36 @@ IntercomDirective = ($config, $analytics) ->
             trackEvent(category, action, label, value)
             return if not initialized
             return if not window.Intercom
+            return if disabled
             window.Intercom('trackEvent', "#{category} #{action}", {category, action, label, value})
 
-    link = ($scope, $el, $attrs) ->
-        patchAnalytics($analytics)
+    initialize = (user) ->
+        if initialized
+            return
 
-        $scope.$on "auth:login", refreshUser
-        $scope.$on "auth:logout", refreshUser
-        $scope.$on "auth:register", refreshUser
-        $scope.$on "auth:refresh", refreshUser
-        $scope.$on "loader:end", () ->
-            if initialized
-                return
+        initialized = true
 
-            initialized = true
+        if typeof window.Intercom == "function"
+            window.Intercom('reattach_activator')
+            window.Intercom('update',intercomSettings)
+        else
+            i = () ->
+                i.c(arguments)
+            i.q = []
+            i.c = (args) -> i.q.push(args)
+            window.Intercom = i
+            s = document.createElement('script')
+            s.type = 'text/javascript'
+            s.async = true
+            s.src = 'https://widget.intercom.io/widget/' + $config.get('intercomApiKey')
+            x = document.getElementsByTagName('script')[0]
+            x.parentNode.insertBefore(s,x)
 
-            if typeof window.Intercom == "function"
-                window.Intercom('reattach_activator')
-                window.Intercom('update',intercomSettings)
-            else
-                i = () ->
-                    i.c(arguments)
-                i.q = []
-                i.c = (args) -> i.q.push(args)
-                window.Intercom = i
-                s = document.createElement('script')
-                s.type = 'text/javascript'
-                s.async = true
-                s.src = 'https://widget.intercom.io/widget/' + $config.get('intercomApiKey')
-                x = document.getElementsByTagName('script')[0]
-                x.parentNode.insertBefore(s,x)
+    $rootScope.$watch "user", (user) ->
+        initialize(user)
+        refreshUser(user)
 
-            refreshUser($scope.user)
-
-    return {
-        restrict: "E"
-        link: link
-    }
+    patchAnalytics()
 
 module = angular.module('intercomPlugin', [])
-module.directive("body", ["$tgConfig", "$tgAnalytics", IntercomDirective])
+module.run(["$tgConfig", "$tgAnalytics", "$rootScope", IntercomDirective])
